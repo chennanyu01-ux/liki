@@ -330,3 +330,41 @@ class TestIntegration_QimenRules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.integration
+class TestIntegration_ChatGPTProbe(unittest.TestCase):
+    def test_qimen_bicycle_probe(self):
+        url = os.environ.get("LIKI_RPC_URL", "")
+        if not url:
+            self.skipTest("LIKI_RPC_URL 未设置")
+        cli = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills", "liki-divination", "tools", "agent_cli.py",
+        )
+        env = dict(os.environ, LIKI_RPC_URL=url)
+        def call(fn, args):
+            p = subprocess.run(
+                ["python3", cli],
+                input=json.dumps({"fn": fn, "args": args}, ensure_ascii=False).encode("utf-8"),
+                capture_output=True, env=env, timeout=60,
+            )
+            result = json.loads(p.stdout)
+            self.assertTrue(result.get("ok"), result.get("error"))
+            return result["data"]
+        snapshot = call("qimen_snapshot", {
+            "question": "我的自行车在哪里？",
+            "city": "宁夏固原市泾源县",
+            "time": "2026-09-11T03:45:00+08:00",
+            "rule": "lost_property",
+            "scope": "hour",
+            "school": "zhuanpan",
+        })
+        answer = call("qimen_ask", {
+            "snapshot": snapshot,
+            "message": "请判断自行车最可能所在方位、环境特征，以及是否容易找到。",
+        })
+        print("CHATGPT_BICYCLE_SNAPSHOT="+json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
+        print("CHATGPT_BICYCLE_ANSWER="+json.dumps(answer, ensure_ascii=False, sort_keys=True))
+        self.assertEqual(snapshot["special"]["rule"], "lost_property")
+        self.assertTrue(answer["audit"]["accepted"])
