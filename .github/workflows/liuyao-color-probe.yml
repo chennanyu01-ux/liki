@@ -1,0 +1,76 @@
+name: Temporary Liuyao Exam Color Probe
+
+on:
+  push:
+    branches: [chatgpt-qimen-bicycle-probe]
+  pull_request:
+    branches: [master]
+
+jobs:
+  liuyao-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+          check-latest: true
+          cache-dependency-path: engine/go.sum
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Build local Liki engine
+        working-directory: engine
+        run: go build -o /tmp/liki-engine ./cmd/liki/
+      - name: Start local Liki engine
+        run: |
+          /tmp/liki-engine -addr :8082 &
+          echo "pid=$!" > /tmp/liki-engine.pid
+          for i in $(seq 1 20); do
+            if curl -sf -o /dev/null http://localhost:8082/health 2>/dev/null; then
+              echo "engine ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "engine failed to become ready"
+          exit 1
+      - name: Run actual Liki Liuyao auto snapshot and ask
+        env:
+          LIKI_RPC_URL: http://localhost:8082/jsonrpc
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+
+          cli = os.path.join('skills', 'liki-divination', 'tools', 'agent_cli.py')
+
+          def call(fn, args):
+              p = subprocess.run(
+                  ['python3', cli],
+                  input=json.dumps({'fn': fn, 'args': args}, ensure_ascii=False).encode('utf-8'),
+                  capture_output=True,
+                  timeout=60,
+                  env=os.environ.copy(),
+              )
+              print('STDERR_'+fn+'='+p.stderr.decode('utf-8', errors='replace'))
+              data = json.loads(p.stdout.decode('utf-8'))
+              if not data.get('ok'):
+                  raise RuntimeError(data.get('error'))
+              return data['data']
+
+          snapshot = call('liuyao_snapshot', {
+              'question': '明天参加教师资格证考试，穿什么颜色的衣服更有利于临场状态和发挥？',
+              'mode': 'auto',
+              'matter': 'study',
+              'topic': 'study',
+          })
+          answer = call('liuyao_ask', {
+              'snapshot': snapshot,
+              'message': '根据此卦，明天服装颜色更宜哪一类？请从五行、生克、用神和考试状态角度给出首选、次选和避选颜色，并说明依据。',
+          })
+          print('CHATGPT_LIUYAO_SNAPSHOT='+json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
+          print('CHATGPT_LIUYAO_ANSWER='+json.dumps(answer, ensure_ascii=False, sort_keys=True))
+          PY
+      - name: Stop local Liki engine
+        if: always()
+        run: kill "$(cat /tmp/liki-engine.pid)" 2>/dev/null || true
