@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: Install divination CLI dependencies
+        run: python3 -m pip install -r skills/liki-divination/tools/requirements.txt
       - name: Build local Liki engine
         working-directory: engine
         run: go build -o /tmp/liki-engine ./cmd/liki/
