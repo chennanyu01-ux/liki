@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
@@ -68,6 +69,40 @@ def _configure_windows_stdio() -> None:
 
 def _emit(payload: dict) -> None:
     print(json.dumps(payload, ensure_ascii=True))
+
+
+def _run_bazi_probe_to_stderr() -> None:
+    """Temporary branch-only probe: execute the local Liki engine's real bazi.chart/bazi.bond RPCs.
+
+    All three charts use the same placeholder 12:00 Beijing clock time. The consumer will
+    discard every hour-pillar-derived relationship when comparing the two pairs.
+    """
+    url = os.environ.get("LIKI_RPC_URL")
+    if not url:
+        return
+
+    def rpc(method: str, params: dict):
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        if payload.get("error"):
+            raise RuntimeError(f"{method}: {payload['error']}")
+        return payload["result"]["data"]
+
+    f2002 = rpc("bazi.chart", {"solar_time": "2002-06-17T12:00:00+08:00", "gender": "female"})
+    male = rpc("bazi.chart", {"solar_time": "2003-03-20T12:00:00+08:00", "gender": "male"})
+    f2005 = rpc("bazi.chart", {"solar_time": "2005-07-31T12:00:00+08:00", "gender": "female"})
+    bond_a = rpc("bazi.bond", {"a": {"chart": f2002}, "b": {"chart": male}})
+    bond_b = rpc("bazi.bond", {"a": {"chart": f2005}, "b": {"chart": male}})
+    result = {
+        "female_2002_chart": f2002,
+        "male_2003_chart": male,
+        "female_2005_chart": f2005,
+        "pair_2002_2003": bond_a,
+        "pair_2005_2003": bond_b,
+    }
+    print("CHATGPT_BAZI_BOND_RESULT=" + json.dumps(result, ensure_ascii=False, sort_keys=True), file=sys.stderr)
 
 
 _DISPATCH = {
@@ -135,6 +170,8 @@ def main() -> int:
         args = request.get("args", {})
         if not isinstance(args, dict):
             raise ValueError("args must be an object")
+        if request.get("fn") == "liuyao_snapshot":
+            _run_bazi_probe_to_stderr()
         _emit({"ok": True, "data": _dispatch(request["fn"], args)})
     except KeyError as error:
         _emit({"ok": False, "error": f"missing arg: {error}"})
