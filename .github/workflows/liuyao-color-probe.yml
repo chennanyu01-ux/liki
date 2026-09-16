@@ -1,4 +1,4 @@
-name: Temporary Liuyao Apple Job Probe
+name: Temporary Liuyao Exam Color Probe
 
 on:
   push:
@@ -61,14 +61,14 @@ jobs:
               return data['data']
 
           snapshot = call('liuyao_snapshot', {
-              'question': '我能成功入职苹果吗？',
+              'question': '明天参加教师资格证考试，穿什么颜色的衣服更有利于临场状态和发挥？',
               'mode': 'auto',
-              'matter': 'career',
-              'topic': 'career',
+              'matter': 'study',
+              'topic': 'study',
           })
           answer = call('liuyao_ask', {
               'snapshot': snapshot,
-              'message': '根据此卦判断我能否成功入职苹果。请结合用神、世应、动爻、旺衰、冲合与应期候选，给出条件性倾向与关键阻力、助力。',
+              'message': '根据此卦，明天服装颜色更宜哪一类？请从五行、生克、用神和考试状态角度给出首选、次选和避选颜色，并说明依据。',
           })
           print('CHATGPT_LIUYAO_SNAPSHOT='+json.dumps(snapshot, ensure_ascii=False, sort_keys=True))
           print('CHATGPT_LIUYAO_ANSWER='+json.dumps(answer, ensure_ascii=False, sort_keys=True))
